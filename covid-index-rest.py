@@ -1,39 +1,23 @@
 #!python3
 from algoliasearch.search_client import SearchClient
 import json
-from pymongo import MongoClient
+import requests
 
-# JHU COVID-19 Geodata ingest using MongoDB 
-# https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-data-atlas/
-
-MDB_URL = "mongodb+srv://readonly:readonly@covid-19.hip2i.mongodb.net/covid19"
+REST_URL = "https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/global_and_us?min_date=2020-08-30T00:00:00.000Z&max_date=2020-08-30T00:00:00.000Z&hide_fields=_id, fips, country_code, country_iso2, country_iso3, population, deaths, confirmed_daily, deaths_daily, recovered, recovered_daily"
 
 def main():
-  client = MongoClient(MDB_URL)
-  db = client.get_database("covid19")
-  stats = db.get_collection("global_and_us")
-  metadata = db.get_collection("metadata")
-
-  # Get the last date loaded:
-  meta = metadata.find_one()
-  last_date = meta["last_date"]
-
-  results = stats.find(
-    {
-        "date":last_date,
-        "loc":{"$exists": True, "$ne": [] }
-      }
-  )
-  # print([doc['combined_name'] + ' ' + str(doc['loc']['coordinates'][0]) + ',' + str(doc['loc']['coordinates'][1]) for doc in results])
+  response = requests.get(REST_URL)
+  # print(response.text)
 
   covid_records = []
-  for row in results:
+  for row in response.json():
     # Unassigned and Unknown records are alread scrubbed in this DB
     # Skip these roll-up locations since they have incomplete data
-    # Note that we filtered out locations w/o coordinates above
-    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada':
+    # and locations w/o coordinates
+    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada' and 'loc' in row:
       covid_loc = {}
       covid_geocode = {}
+      print(row['combined_name'])
       covid_loc['objectID'] = row['combined_name']
       # Let's not use the combined key for US cities, instead let's use city and state  
       if 'county' in row:
@@ -48,7 +32,7 @@ def main():
       covid_records.append(covid_loc)
 
   # Write the records to a file
-  with open('export/export-mongodb.json', 'w') as outfile:
+  with open('export/export-rest.json', 'w') as outfile:
     json.dump(covid_records, outfile)
 
   # Create the index
