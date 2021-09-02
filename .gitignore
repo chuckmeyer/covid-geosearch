@@ -12,7 +12,7 @@
 /build
 
 # data files
-.json
+/export
 
 # misc
 .DS_Store
