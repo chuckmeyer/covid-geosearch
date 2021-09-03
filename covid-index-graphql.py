@@ -3,24 +3,42 @@ from algoliasearch.search_client import SearchClient
 import json
 import requests
 
-# Need a way to find the latest file (date in URL)
-REST_URL = 'https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/global_and_us?min_date=2021-08-30T00:00:00.000Z&max_date=2021-08-30T00:00:00.000Z&hide_fields=_id, fips, country_code, country_iso2, country_iso3, population, deaths, confirmed_daily, deaths_daily, recovered, recovered_daily'
+# JHU COVID-19 Geodata ingest using GraphQL
+# https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-graphql-api/
+
+GRAPHQL_AUTH = "https://realm.mongodb.com/api/client/v2.0/app/covid-19-qppza/auth/providers/anon-user/login"
+GRAPHQL_URL  = "https://realm.mongodb.com/api/client/v2.0/app/covid-19-qppza/graphql"
 
 def main():
-  response = requests.get(REST_URL)
+  response = requests.get(GRAPHQL_AUTH)
+  access_token =  response.json()['access_token']
+
+  headers = {}
+  headers["Accept"] = "application/json"
+  headers["Content-Type"] = "application/json"
+  headers["Authorization"] = "Bearer {}".format(access_token)
+
+  query = """query {
+    global_and_us(query: { date: "2021-08-30T00:00:00Z" }, limit:5000)
+    { confirmed county state country combined_name loc { type coordinates }}
+}"""
+
+  response = requests.post(GRAPHQL_URL, headers=headers, json={'query': query})
+  if response.status_code != 200:
+    raise Exception(f"Query failed to run with a {response.status_code}.")
 
   covid_records = []
-  for row in response.json():
+  for row in response.json()['data']['global_and_us']:
     # Unassigned and Unknown records are alread scrubbed in this DB
     # Skip 'US' and 'Canada' since they have incomplete data
     # and locations w/o coordinates
-    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada' and 'loc' in row:
+    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada' and row['loc'] != None:
       covid_loc = {}
       covid_geocode = {}
       print(row['combined_name'])
       covid_loc['objectID'] = row['combined_name']
       # Let's not use the combined key for US cities, instead let's use city and state  
-      if 'county' in row:
+      if row['county'] != None:
         covid_loc['location'] = row['county'] + ', ' + row['state']
       else:
         covid_loc['location'] = row['combined_name']
@@ -30,11 +48,9 @@ def main():
       covid_geocode['lng'] = row['loc']['coordinates'][0]
       covid_loc['_geoloc'] = covid_geocode
       covid_records.append(covid_loc)
-    else:
-      print('Skipping {}: No geocode'.format(row['combined_name']))
-  
+
   # Write the records to a file
-  with open('export/export-rest.json', 'w') as outfile:
+  with open('export/export-graphql.json', 'w') as outfile:
     json.dump(covid_records, outfile)
 
   # Create the index

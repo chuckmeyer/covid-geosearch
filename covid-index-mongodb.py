@@ -2,6 +2,7 @@
 from algoliasearch.search_client import SearchClient
 import json
 from pymongo import MongoClient
+import datetime
 
 # JHU COVID-19 Geodata ingest using MongoDB 
 # https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-data-atlas/
@@ -20,20 +21,21 @@ def main():
 
   results = stats.find(
     {
-        "date":last_date,
+#        "date":last_date,
+        "date": datetime.datetime(2021, 8, 30, 0, 0),
         "loc":{"$exists": True, "$ne": [] }
       }
   )
-  # print([doc['combined_name'] + ' ' + str(doc['loc']['coordinates'][0]) + ',' + str(doc['loc']['coordinates'][1]) for doc in results])
 
   covid_records = []
   for row in results:
     # Unassigned and Unknown records are alread scrubbed in this DB
-    # Skip these roll-up locations since they have incomplete data
-    # Note that we filtered out locations w/o coordinates above
+    # Skip 'US' and 'Canada' since they have incomplete data
+    # and locations w/o coordinates
     if row['combined_name'] != 'US' and row['combined_name'] != 'Canada':
       covid_loc = {}
       covid_geocode = {}
+      print(row['combined_name'])
       covid_loc['objectID'] = row['combined_name']
       # Let's not use the combined key for US cities, instead let's use city and state  
       if 'county' in row:
@@ -46,6 +48,8 @@ def main():
       covid_geocode['lng'] = row['loc']['coordinates'][0]
       covid_loc['_geoloc'] = covid_geocode
       covid_records.append(covid_loc)
+    else:
+      print('Skipping {}: No geocode'.format(row['combined_name']))
 
   # Write the records to a file
   with open('export/export-mongodb.json', 'w') as outfile:
