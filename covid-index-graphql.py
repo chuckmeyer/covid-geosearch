@@ -54,7 +54,7 @@ def main():
     json.dump(covid_records, outfile)
 
   # Create the index
-  client = SearchClient.create('FMXYI0LKWR', '994555c727b589b326344e574c0a959b')
+  client = SearchClient.create(APP_ID, API_KEY)
   index = client.init_index('covid-geo')
   settings = index.get_settings()
   with open('export/index-settings.json', 'w') as outfile:
