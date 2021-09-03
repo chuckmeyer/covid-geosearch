@@ -1,7 +1,12 @@
 #!python3
+import os
+
 from algoliasearch.search_client import SearchClient
+from dotenv import load_dotenv, find_dotenv
 import json
 import requests
+
+load_dotenv(find_dotenv())
 
 # Need a way to find the latest file (date in URL)
 REST_URL = 'https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/global_and_us?min_date=2021-08-30T00:00:00.000Z&max_date=2021-08-30T00:00:00.000Z&hide_fields=_id, fips, country_code, country_iso2, country_iso3, population, deaths, confirmed_daily, deaths_daily, recovered, recovered_daily'
@@ -38,8 +43,8 @@ def main():
     json.dump(covid_records, outfile)
 
   # Create the index
-  client = SearchClient.create(APP_ID, API_KEY)
-  index = client.init_index('covid-geo')
+  client = SearchClient.create(os.getenv('APP_ID'), os.getenv('API_KEY'))
+  index = client.init_index(os.getenv('ALGOLIA_INDEX_NAME'))
   settings = index.get_settings()
   with open('export/index-settings.json', 'w') as outfile:
     json.dump(settings, outfile)

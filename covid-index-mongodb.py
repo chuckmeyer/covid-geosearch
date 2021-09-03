@@ -1,8 +1,13 @@
 #!python3
+import os
+
 from algoliasearch.search_client import SearchClient
+from dotenv import load_dotenv, find_dotenv
 import json
 from pymongo import MongoClient
 import datetime
+
+load_dotenv(find_dotenv())
 
 # JHU COVID-19 Geodata ingest using MongoDB 
 # https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-data-atlas/
@@ -56,8 +61,8 @@ def main():
     json.dump(covid_records, outfile)
 
   # Create the index
-  client = SearchClient.create(APP_ID, API_KEY)
-  index = client.init_index('covid-geo')
+  client = SearchClient.create(os.getenv('APP_ID'), os.getenv('API_KEY'))
+  index = client.init_index(os.getenv('ALGOLIA_INDEX_NAME'))
   settings = index.get_settings()
   with open('export/index-settings.json', 'w') as outfile:
     json.dump(settings, outfile)

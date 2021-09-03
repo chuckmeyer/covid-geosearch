@@ -1,7 +1,12 @@
 #!python3
+import os
+
 from algoliasearch.search_client import SearchClient
+from dotenv import load_dotenv, find_dotenv
 import json
 import pandas
+
+load_dotenv(find_dotenv())
 
 # Need a way to find the latest file (date string filenames)
 DATA_FILE = '../COVID-19/csse_covid_19_data/csse_covid_19_daily_reports/08-30-2021.csv'
@@ -38,8 +43,8 @@ def main():
     json.dump(covid_records, outfile)
 
   # Create the index
-  client = SearchClient.create(APP_ID, API_KEY)
-  index = client.init_index('covid-geo')
+  client = SearchClient.create(os.getenv('APP_ID'), os.getenv('API_KEY'))
+  index = client.init_index(os.getenv('ALGOLIA_INDEX_NAME'))
   settings = index.get_settings()
   with open('export/index-settings.json', 'w') as outfile:
     json.dump(settings, outfile)
