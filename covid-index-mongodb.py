@@ -12,62 +12,77 @@ load_dotenv(find_dotenv())
 # JHU COVID-19 Geodata ingest using MongoDB 
 # https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-data-atlas/
 
-MDB_URL = "mongodb+srv://readonly:readonly@covid-19.hip2i.mongodb.net/covid19"
+MDB_URL = 'mongodb+srv://readonly:readonly@covid-19.hip2i.mongodb.net/covid19'
+
 
 def main():
   client = MongoClient(MDB_URL)
-  db = client.get_database("covid19")
-  stats = db.get_collection("global_and_us")
-  metadata = db.get_collection("metadata")
+  db = client.get_database('covid19')
+  stats = db.get_collection('global_and_us')
+  metadata = db.get_collection('metadata')
 
   # Get the last date loaded:
   meta = metadata.find_one()
-  last_date = meta["last_date"]
+  last_date = meta['last_date']
 
   results = stats.find(
     {
-#        "date":last_date,
-        "date": datetime.datetime(2021, 8, 30, 0, 0),
-        "loc":{"$exists": True, "$ne": [] }
-      }
+      'date':last_date,
+      'loc':{'$exists': True, '$ne': [] }
+    }, {
+      'combined_name': 1, 
+      'county': 1,
+      'state': 1,
+      'country': 1,
+      'confirmed': 1,
+      'loc': 1
+    }
   )
 
+  covid_records = transform_records(results)
+
+  # Write the records to a file
+  with open('export/export-mongodb.json', 'w') as outfile:
+    json.dump(covid_records, outfile)
+
+  update_index(covid_records)
+
+
+
+def transform_records(results):
   covid_records = []
   for row in results:
     # Unassigned and Unknown records are alread scrubbed in this DB
     # Skip 'US' and 'Canada' since they have incomplete data
     # and locations w/o coordinates
     if row['combined_name'] != 'US' and row['combined_name'] != 'Canada':
-      covid_loc = {}
+      covid_record = {}
       covid_geocode = {}
       print(row['combined_name'])
-      covid_loc['objectID'] = row['combined_name']
-      # Let's not use the combined key for US cities, instead let's use city and state  
+      covid_record['objectID'] = row['combined_name']
+      # Let's not use the combined key for US counties, instead let's use county and state  
       if 'county' in row:
-        covid_loc['location'] = row['county'] + ', ' + row['state']
+        covid_record['location'] = row['county'] + ', ' + row['state']
       else:
-        covid_loc['location'] = row['combined_name']
-      covid_loc['country'] = row['country']
-      covid_loc['confirmed_cases'] = row['confirmed']
+        covid_record['location'] = row['combined_name']
+      covid_record['country'] = row['country']
+      covid_record['confirmed_cases'] = row['confirmed']
       covid_geocode['lat'] = row['loc']['coordinates'][1]
       covid_geocode['lng'] = row['loc']['coordinates'][0]
-      covid_loc['_geoloc'] = covid_geocode
-      covid_records.append(covid_loc)
+      covid_record['_geoloc'] = covid_geocode
+      covid_records.append(covid_record)
     else:
       print('Skipping {}: No geocode'.format(row['combined_name']))
+  return covid_records
 
-  # Write the records to a file
-  with open('export/export-mongodb.json', 'w') as outfile:
-    json.dump(covid_records, outfile)
 
+def update_index(covid_records):
   # Create the index
   client = SearchClient.create(os.getenv('APP_ID'), os.getenv('API_KEY'))
   index = client.init_index(os.getenv('ALGOLIA_INDEX_NAME'))
-  settings = index.get_settings()
-  with open('export/index-settings.json', 'w') as outfile:
-    json.dump(settings, outfile)
   index.clear_objects()
   index.save_objects(covid_records)
 
-if __name__ == "__main__":
-    main()
+
+if __name__ == '__main__':
+  main()
