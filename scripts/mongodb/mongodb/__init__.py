@@ -4,43 +4,54 @@ import os
 from algoliasearch.search_client import SearchClient
 from dotenv import load_dotenv, find_dotenv
 import json
-import requests
+from pymongo import MongoClient
+import datetime
 
 load_dotenv(find_dotenv())
 
-METADATA_URL = 'https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/metadata'
-REST_URL = 'https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/global_and_us'
+# JHU COVID-19 Geodata ingest using MongoDB 
+# https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-data-atlas/
+
+MDB_URL = 'mongodb+srv://readonly:readonly@covid-19.hip2i.mongodb.net/covid19'
+
+export_path = "../export"
+export_file = "export-mongodb.json"
 
 
 def main():
-  meta = requests.get(METADATA_URL)
-  last_date = meta.json()['last_date']
-#  QUERY = {
-#    'min_date': '2021-08-30T00:00:00.000Z',
-#    'max_date': '2021-08-30T00:00:00.000Z',
-#    'hide_fields': '_id, fips, country_code, country_iso2, country_iso3, population, deaths, confirmed_daily, deaths_daily, recovered, recovered_daily'
-#  }
-  QUERY = {
-    'min_date': last_date,
-    'max_date': last_date,
-    'hide_fields': '_id, fips, country_code, country_iso2, country_iso3, population, deaths, confirmed_daily, deaths_daily, recovered, recovered_daily'
-  }
-  response = requests.get(REST_URL, params=QUERY)
+  client = MongoClient(MDB_URL)
+  db = client.get_database('covid19')
+  stats = db.get_collection('global_and_us')
+  metadata = db.get_collection('metadata')
 
-  covid_records = transform_records(response.json())
+  # Get the last date loaded:
+  meta = metadata.find_one()
+  last_date = meta['last_date']
+
+  results = stats.find(
+    {
+      'date':last_date,
+      'loc':{'$exists': True, '$ne': [] }
+    }, {
+      'combined_name': 1, 
+      'county': 1,
+      'state': 1,
+      'country': 1,
+      'confirmed': 1,
+      'loc': 1
+    }
+  )
+
+  covid_records = transform_records(results)
 
   # Write the records to a file
-  with open('export/export-rest.json', 'w') as outfile:
+  if not os.path.exists(export_path):
+    os.makedirs(export_path)
+  
+  with open(os.path.join(export_path, export_file), 'w') as outfile:
     json.dump(covid_records, outfile)
 
-  # Create the index
-  client = SearchClient.create(os.getenv('APP_ID'), os.getenv('API_KEY'))
-  index = client.init_index(os.getenv('ALGOLIA_INDEX_NAME'))
-  settings = index.get_settings()
-  with open('export/index-settings.json', 'w') as outfile:
-    json.dump(settings, outfile)
-  index.clear_objects()
-  index.save_objects(covid_records)
+  update_index(covid_records)
 
 
 def transform_records(results):
@@ -49,7 +60,7 @@ def transform_records(results):
     # Unassigned and Unknown records are alread scrubbed in this DB
     # Skip 'US' and 'Canada' since they have incomplete data
     # and locations w/o coordinates
-    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada' and 'loc' in row:
+    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada':
       covid_record = {}
       covid_geocode = {}
       print(row['combined_name'])
@@ -78,5 +89,5 @@ def update_index(covid_records):
   index.save_objects(covid_records)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   main()

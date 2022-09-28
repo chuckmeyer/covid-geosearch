@@ -8,40 +8,37 @@ import requests
 
 load_dotenv(find_dotenv())
 
-# JHU COVID-19 Geodata ingest using GraphQL
-# https://www.mongodb.com/developer/article/johns-hopkins-university-covid-19-graphql-api/
+# JHU COVID-19 Geodata ingest using REST API
 
-GRAPHQL_AUTH = "https://realm.mongodb.com/api/client/v2.0/app/covid-19-qppza/auth/providers/anon-user/login"
-GRAPHQL_URL  = "https://realm.mongodb.com/api/client/v2.0/app/covid-19-qppza/graphql"
+METADATA_URL = 'https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/metadata'
+REST_URL = 'https://webhooks.mongodb-stitch.com/api/client/v2.0/app/covid-19-qppza/service/REST-API/incoming_webhook/global_and_us'
 
+export_path = "../export"
+export_file = "export-rest.json"
 
 def main():
-  response = requests.get(GRAPHQL_AUTH)
-  access_token =  response.json()['access_token']
-
-  headers = {}
-  headers["Accept"] = "application/json"
-  headers["Content-Type"] = "application/json"
-  headers["Authorization"] = "Bearer {}".format(access_token)
-
-  metadata = requests.post(GRAPHQL_URL, headers=headers, json={'query': 'query { metadatum{ last_date }}'})
+  metadata = requests.get(METADATA_URL)
   if metadata.status_code != 200:
     raise Exception(f"Query failed to run with a {response.status_code}.")
-  last_date = metadata.json()['data']['metadatum']['last_date']
+  last_date = meta.json()['last_date']
 
-  query = '''query {
-    global_and_us(query: { date: "''' + last_date + '''" }, limit:5000)
-    { confirmed county state country combined_name loc { type coordinates }}
-}'''
+  query = {
+    'min_date': last_date,
+    'max_date': last_date,
+    'hide_fields': '_id, fips, country_code, country_iso2, country_iso3, population, deaths, confirmed_daily, deaths_daily, recovered, recovered_daily'
+  }
 
-  response = requests.post(GRAPHQL_URL, headers=headers, json={'query': query})
+  response = requests.get(REST_URL, params=query)
   if response.status_code != 200:
     raise Exception(f"Query failed to run with a {response.status_code}.")
 
-  covid_records = transform_records(response.json()['data']['global_and_us'])
+  covid_records = transform_records(response.json())
 
   # Write the records to a file
-  with open('export/export-graphql.json', 'w') as outfile:
+  if not os.path.exists(export_path):
+    os.makedirs(export_path)
+  
+  with open(os.path.join(export_path, export_file), 'w') as outfile:
     json.dump(covid_records, outfile)
 
   update_index(covid_records)
@@ -53,13 +50,13 @@ def transform_records(results):
     # Unassigned and Unknown records are alread scrubbed in this DB
     # Skip 'US' and 'Canada' since they have incomplete data
     # and locations w/o coordinates
-    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada' and row['loc'] != None:
+    if row['combined_name'] != 'US' and row['combined_name'] != 'Canada' and 'loc' in row:
       covid_record = {}
       covid_geocode = {}
       print(row['combined_name'])
       covid_record['objectID'] = row['combined_name']
       # Let's not use the combined key for US counties, instead let's use county and state  
-      if row['county'] != None:
+      if 'county' in row:
         covid_record['location'] = row['county'] + ', ' + row['state']
       else:
         covid_record['location'] = row['combined_name']

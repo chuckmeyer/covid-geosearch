@@ -11,6 +11,8 @@ load_dotenv(find_dotenv())
 # Need a way to find the latest file (date string filenames)
 DATA_FILE = '../COVID-19/csse_covid_19_data/csse_covid_19_daily_reports/08-30-2021.csv'
 
+export_path = "../export"
+export_file = "export-csv.json"
 
 def main():
   df = pandas.read_csv(DATA_FILE)
@@ -18,7 +20,10 @@ def main():
   covid_records = transform_records(df.iterrows())
 
   # Write the records to a file
-  with open('export/export-csv.json', 'w') as outfile:
+  if not os.path.exists(export_path):
+    os.makedirs(export_path)
+  
+  with open(os.path.join(export_path, export_file), 'w') as outfile:
     json.dump(covid_records, outfile)
 
   update_index(covid_records)
@@ -59,3 +64,4 @@ def update_index(covid_records):
 
 if __name__ == "__main__":
   main()
+

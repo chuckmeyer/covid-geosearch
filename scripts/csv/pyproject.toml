@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "csv"
+version = "0.1.0"
+description = ""
+authors = ["Chuck Meyer <chuck.meyer@algolia.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+algoliasearch = "^2.6.2"
+python-dotenv = "^0.21.0"
+pandas = "^1.5.0"
+
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^5.0.4"
+black = "^22.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
