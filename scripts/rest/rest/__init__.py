@@ -20,7 +20,7 @@ def main():
   metadata = requests.get(METADATA_URL)
   if metadata.status_code != 200:
     raise Exception(f"Query failed to run with a {response.status_code}.")
-  last_date = meta.json()['last_date']
+  last_date = metadata.json()['last_date']
 
   query = {
     'min_date': last_date,
